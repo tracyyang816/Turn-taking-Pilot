@@ -1,0 +1,342 @@
+<!doctype html>
+<html>
+<head>
+
+    <title>Robot Control Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 5px;
+        }
+        .status-box {
+            background-color: #f2f2f2;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            max-width: 900px;
+        }
+        .grid-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .section {
+            flex: 1 1 250px;
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            background-color: #fafafa;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
+            min-width: 250px;
+        }
+        .section h2 {
+            margin-top: 0;
+            font-size: 16px;
+            text-align: center;
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        button {
+            padding: 8px 14px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        setInterval(() => {
+            fetch('/status')
+                .then(res => res.json())
+                .then(data => {
+    
+                    document.getElementById("silence").textContent = data.silence;
+                    document.getElementById("speech_ratio").textContent = data.speech_ratio;
+                    document.getElementById("cur_time_passed").textContent = data.cur_time_passed;
+                    document.getElementById("non_dom_id").textContent = data.non_dom_id;
+                });
+        }, 200);  // every 200ms
+        </script>
+
+<div class="status-box">
+    <!-- <p><b>Overlap:</b> <span id="overlap">{{ overlap }}</span></p> -->
+
+    <p><b>Silence:</b> 
+        {% if silence is not none and silence >= 2 %}
+            <span id="silence" style="color:red">{{ silence }}</span>
+        {% else %}
+            <span id="silence">{{ silence }}</span>
+        {% endif %}
+    </p>
+
+    <p><b>Speech Ratio:</b> 
+        {% if speech_ratio is not none and (speech_ratio > 1.5 or speech_ratio < 0.66) %}
+            <span id="speech_ratio" style="color:red">{{ speech_ratio }}</span>
+        {% else %}
+            <span id="speech_ratio">{{ speech_ratio }}</span>
+        {% endif %}
+    </p>
+
+    <p><b>Time Passed:</b> 
+        {% if cur_time_passed is not none and cur_time_passed > 240 %}
+            <span id="cur_time_passed" style="color:red">{{ cur_time_passed }}</span>
+        {% else %}
+            <span id="cur_time_passed">{{ cur_time_passed }}</span>
+        {% endif %}
+    </p>
+
+    <!-- <p><b>Dominant Position:</b> <span id="dom_pos">{{ dom_pos }}</span></p> -->
+    <p><b>Non-dominant Player ID:</b> <span id="non_dom_id">{{ non_dom_id }}</span></p>
+</div>
+
+
+    <!-- <div>
+        <a href="/set_user/left_user"><button type="button">Select Left User</button></a>
+        <a href="/set_user/right_user"><button type="button">Select Right User</button></a>
+    </div>
+
+    <div>
+        <p><b>Selected Target User:</b>
+            {% if session.get("target_user") == 'right_user' %}
+                <span class="red">Right User</span>
+            {% else %}
+                <span>Left User</span>
+            {% endif %}
+            </p>
+            
+    </div> -->
+    
+
+</div>
+
+
+
+<div style="border: 1px solid #ccc; display: flex; gap: 20px; margin-bottom: 20px;" >
+    <div class="section">
+        <h2>Custom Command</h2>
+        <form method="POST" action="/send_command" style="display: flex; gap: 10px; align-items: center;">
+     
+            <input type="text" name="custom_text" placeholder="Type custom command..." style="flex: 1; padding: 6px;">
+           
+            <input type="hidden" name="command" value="send">
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+
+
+
+
+<div class="section">
+    <h2>Quick Select</h2>
+    <div class="button-group" id="quick-select-group" style="display: flex; gap: 20px; align-items: center;">
+        <button type="button" class="quick-btn" data-value="1">1</button>
+        <button type="button" class="quick-btn" data-value="2">2</button>
+        <button type="button" class="quick-btn" data-value="3">3</button>
+    </div>
+
+    <!-- hidden form to submit selected command -->
+    <form id="quick-form" method="POST" action="/send_command" style="display:none;">
+        <input type="hidden" name="command" id="quick-command-input">
+    </form>
+</div>
+</div>
+
+
+    <form method="POST" action="/send_command">
+        <input type="hidden" name="target" value="{{ session.get('target_user', 'left_user') }}">
+
+           
+
+        <div class="grid-container">
+
+            <div class="section">
+                <h2>Introduction</h2>
+                <div class="button-group">
+                    <button name="command" value="hi">Hi</button>
+                    <button name="command" value="nice">Nice</button>
+                    <button name="command" value="intro">Intro</button>
+                    <button name="command" value="know">Know</button>
+                    <button name="command" value="thank">Thank</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Connection</h2>
+                <div class="button-group">
+                    <button name="command" value="last">Last</button>
+                    <button name="command" value="most">Most</button>
+
+                    <button name="command" value="default">Default</button>
+                    <button name="command" value="sleep">Sleep</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Open</h2>
+                <div class="button-group">
+                    <button name="command" value="open1">Open1</button>
+                    <button name="command" value="open2">Open2</button>
+                    <button name="command" value="open3">Open3</button>
+
+                    
+
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Time</h2>
+                <div class="button-group">
+                    <button name="command" value="1min">1 Min Left</button>
+                    <button name="command" value="nudge">Nudge</button>
+                    <button name="command" value="agreement">Agreement</button>
+                    <button name="command" value="explain">Explain</button>
+                    <button name="command" value="extra">Extra Item</button>
+                    <button name="command" value="wrap">Wrap Up</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Basics</h2>
+                <div class="button-group">
+                    <button name="command" value="yes">Yes</button>
+                    <button name="command" value="no">No</button>
+                    <button name="command" value="idk">IDK</button>
+                    <button name="command" value="goodpoint">Good Point</button>
+
+                    <button name="command" value="thankyou">Thank You</button>
+                    <button name="command" value="back">Back-channel</button>
+                    <button name="command" value="wbu">Redirect</button>
+                    
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Open-ended</h2>
+                <div class="button-group">
+                    <button name="command" value="buffer">Buffer</button>
+                    <button name="command" value="clarify">Clarify</button>
+
+                    <button name="command" value="why">Why</button>
+                    <button name="command" value="explain">Explain</button>
+
+                    
+                    <button name="command" value="skill">Skill</button>
+                    <button name="command" value="challenge">Challenge</button>
+                    <button name="command" value="where">Where</button>
+                    <button name="command" value="generate">Generate</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Backup</h2>
+                <div class="button-group">
+                    <button name="command" value="warmth">Warmth</button>
+                    <button name="command" value="shelter">Shelter</button>
+                    <button name="command" value="food">Food</button>
+                    <button name="command" value="water">Water</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Gaze</h2>
+                <div class="button-group">
+                    <button name="command" value="nod">nod</button>
+                    <button name="command" value="left">Left</button>
+                    <button name="command" value="right">Right</button>
+                    <button name="command" value="center">Center</button>
+                    
+                    <button name="command" value="concerned">Concerned</button>
+                </div>
+            </div>
+
+
+        </div>
+    </form>
+
+
+
+    <script>
+        const quickButtons = document.querySelectorAll(".quick-btn");
+        const quickForm = document.getElementById("quick-form");
+        const quickInput = document.getElementById("quick-command-input");
+    
+        quickButtons.forEach(btn => {
+            btn.addEventListener("click", () => {
+                // Clear previous highlights
+                quickButtons.forEach(b => b.classList.remove("selected"));
+    
+                // Highlight this button
+                btn.classList.add("selected");
+    
+                // Submit the corresponding value
+                quickInput.value = btn.dataset.value;
+                quickForm.submit();
+            });
+        });
+
+        
+    </script>
+
+
+
+    <style>
+        .quick-btn.selected {
+            background-color: #eef5ff;
+            border: 2px solid #007BFF;
+            box-shadow: 0 0 6px #007BFF;
+        }
+    </style>
+
+    <script>
+    function submitCommand() {
+        const command = document.getElementById('custom-command-input').value;
+    
+        fetch('/send_custom_command', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ command: command })
+        })
+        .then(response => response.text())
+        .then(data => {
+            console.log("Response:", data);
+            // Optional: clear the textbox
+            document.getElementById('custom-command-input').value = '';
+        })
+        .catch(error => {
+            console.error("Error:", error);
+        });
+
+    }
+    </script>
+
+
+
+
+    <script>
+    function setQuickSelect(command) {
+        fetch('/set_quick_command', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ quick_command: command })
+        });
+    }
+    </script>
+
+
+</body>
+
+
+
+</html>
