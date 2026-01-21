@@ -42,8 +42,6 @@ import os
 
 # from queue import Queue
 
-
-
 angles = []
 stop_event = threading.Event()
 stop_event.clear()
@@ -380,6 +378,7 @@ def main():
                 except:
                     pass  # Don’t crash on failure
 
+                print("angles: ", angles)
 
                 # Misty Logs
                 intervention_activity.append((time_passed, tasks))
@@ -408,7 +407,6 @@ def main():
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
 
 
-            print("angles: ", angles)
             
             # video_out.write(frame)
             # if not video_out.isOpened():
