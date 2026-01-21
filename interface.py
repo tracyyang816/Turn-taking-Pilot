@@ -77,11 +77,12 @@ def receive_status():
             print(f"[Status Server] Connection accepted from {addr}")
             buffer = ""
             intervention_list = []
-            name = status_data.get("name")
-            intervention_type = status_data.get("condition")
+            
 
             while True:
                 data = conn.recv(1024)
+                name = status_data.get("name")
+                intervention_type = status_data.get("condition")
                 if not data:
                     print("[Status Server] Connection closed by sender.")
                     with open(f"./data/Dyad{name}/P{name}_{intervention_type}_intervention.json", "w") as f:

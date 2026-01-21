@@ -51,12 +51,12 @@ class Speaker():
         self.position = position
         if position[0] > 0.5:
             self.range = [190, 360]
-            # self.speaker_id = "Player 2"
-            self.speaker_id = ""
+            self.speaker_id = "Player 2"
+            # self.speaker_id = ""
         else:
             self.range = [0, 170]
-            # self.speaker_id = "Player 1"
-            self.speaker_id = ""
+            self.speaker_id = "Player 1"
+            # self.speaker_id = ""
 
     # update lip distance for variability calculation
     def update_lip_movement(self, lip_moved):

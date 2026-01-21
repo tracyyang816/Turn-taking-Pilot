@@ -32,11 +32,13 @@ from doa_tuning import Tuning
 import usb.core
 import usb.util
 import json
+import queue
 
 import sounddevice as sd
 import soundfile as sf
 import subprocess
 from pathlib import Path
+import os
 
 # from queue import Queue
 
@@ -46,6 +48,7 @@ angles = []
 stop_event = threading.Event()
 stop_event.clear()
 
+frame_queue = queue.Queue()
 
 # video_queue = Queue()
 
@@ -94,6 +97,8 @@ def process_speaking_variability(lip_distances, talking_variability_threshold, i
     for i in lip_distances:
         variability = np.std(lip_distances[i])
         is_talking = (variability > talking_variability_threshold)
+        if is_talking:
+            print(i, "lip talking")
         is_talking_dict[i] = is_talking
         lip_distances[i] = []
 
@@ -123,6 +128,7 @@ def receive_angles(Mic_Tuning):
                 angles.append(angle)
         except KeyboardInterrupt:
             break
+
             
 # def video_writer(video_out):
 #     while True:
@@ -132,13 +138,83 @@ def receive_angles(Mic_Tuning):
 #         video_out.write(frame)
 
 
-def record_video(intervention_type, name, audio_thread):
+
+
+def show_video():
+    while True:
+        if not frame_queue.empty():
+            frame = frame_queue.get()
+            cv2.imshow("MediaPipe Mouth Detection", frame)
+        if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
+            break
+    cv2.destroyAllWindows()
+
+def record_audio(audio_out, samplerate=44100, channels=1):
+
+    frames = []  # We'll collect chunks here
+
+    def callback(indata, frames_count, time_info, status):
+        if stop_event.is_set():
+            raise sd.CallbackStop()  # Stop the stream gracefully
+        frames.append(indata.copy())
+
+    with sd.InputStream(samplerate=samplerate, channels=channels, callback=callback):
+        print("Recording audio... Press Ctrl+C to stop early.")
+        while not stop_event.is_set():
+            time.sleep(0.1)  # Keep thread alive while recording
+
+    # Concatenate all chunks and write to a file
+    audio_data = np.concatenate(frames, axis=0)
+    sf.write(audio_out, audio_data, samplerate)
+    print(f"Audio saved: {audio_out}")
+
+
+
+
+def main():
+    global angles
+ 
+
+    sim = "-s" in sys.argv
+    
+    if "-g" in sys.argv:
+        intervention_type = "gaze"
+        wizard = False
+    if "-swg" in sys.argv:
+        intervention_type = "speech_w_gaze"
+        wizard = True
+    elif "-v" in sys.argv:
+        intervention_type = "verbal"
+        wizard = True
+
+    name = input ("Participant number: ")
+    folder = Path(f"./data/Dyad{name}/")
+    folder.mkdir(parents=True, exist_ok=True)  # Creates the folder
+    video_path = f"./data/Dyad{name}/P{name}_{intervention_type}_video.mp4"
+    audio_path = f"./data/Dyad{name}/P{name}_{intervention_type}_audio.wav"
+    final_path = f"./data/Dyad{name}/P{name}_{intervention_type}_merged.mp4"
+
+    audio_thread = threading.Thread(target = record_audio, args=(audio_path,))
+   
+    
+    # initialize mic array 
+    if not sim:
+        device = usb.core.find(idVendor=0x2886, idProduct=0x0018)
+        if device is None:
+            raise ValueError("Device not found")
+        if device:
+            Mic_tuning = Tuning(device)
+            Mic_tuning.set_vad_threshold(5) # Modify this vad threshold based on ambient noises
+
+        receive_angle_thread = threading.Thread(target = receive_angles, args = (Mic_tuning, ))
+        receive_angle_thread.start()
+
     global angles
 
     mp_face_mesh = mp.solutions.face_mesh
     confidence = 0.5
     face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=2, min_detection_confidence = confidence) # (static_image_mode=False, max_num_faces=2, min_detection_confidence = 0.5)
-    talking_variability_threshold = 0.05
+    talking_variability_threshold = 0.03
 
     lip_distances = defaultdict(list)
     is_talking_dict = defaultdict(bool)
@@ -146,23 +222,29 @@ def record_video(intervention_type, name, audio_thread):
     segment_duration = 0.2 # is_talking decision is made based on lip variability and angles within segment_duration
     start_time = time.time()
 
-    speaker1 = Speaker(0)
-    speaker2 = Speaker(1)
+    speaker1 = Speaker("0")
+    speaker2 = Speaker("1")
     speaker_list = [speaker1, speaker2]
     speaker_created = False
     angles = []
     cam_failure = 0
     audio_started = False
- 
+    
+
     controller = GazeDecision(speaker1, speaker2, min_gaze=3.0, max_gaze=5.0)
     client_socket = connect_host() # sending to intervention.py
     cap = cv2.VideoCapture(0)
+
+    if not cap.isOpened():
+        raise RuntimeError("Cannot open camera")
+
 
     # recording
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))  
-    video_out = cv2.VideoWriter(f"./data/Dyad{name}/P{name}_{intervention_type}_video.mp4", fourcc, 20.0, (w, h))
+    outpath = os.path.abspath(f"./data/Dyad{name}/P{name}_{intervention_type}_video.mp4")
+    video_out = cv2.VideoWriter(outpath, fourcc, 20.0, (w, h))
 
     # timestamp
     time_passed = 0
@@ -175,20 +257,18 @@ def record_video(intervention_type, name, audio_thread):
     fps = 20.0
     frame_interval = 1.0 / fps
 
-    # Initialize time tracker
-    next_frame_time = time.time()
     try:
-        if stop_event.is_set():
-            print("set")
         # Repeat to read from sensors 
-        while not stop_event.is_set():
-            frame_start = time.time()
+        while True:
             ret, frame = cap.read()
+
+
             if not ret:
                 print("Failed to capture frame. Exiting...")
                 break
 
             h, w, _ = frame.shape
+
             
 
             # make the frame lighter 
@@ -214,7 +294,7 @@ def record_video(intervention_type, name, audio_thread):
 
                 # if we already failed the camera initialization check, now fall back on voice activity 
                 # we initialize pos_list and is_talking_dict, by default we assume lips are moving 
-                voice_only = (cam_failure >= 10)
+                voice_only = (cam_failure >= 100)
                 if voice_only:
                     pos_list = [(0.3, 0.6), (0.7, 0.6)]
                     create_speakers(pos_list, speaker_list)
@@ -328,33 +408,27 @@ def record_video(intervention_type, name, audio_thread):
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
 
 
-            video_out.write(frame)
-       
-            # cv2.imshow("MediaPipe Mouth Detection", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            print("angles: ", angles)
             
-
-            next_frame_time += frame_interval
-            sleep_time = next_frame_time - time.time()
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-            else:
-                next_frame_time = time.time()
+            # video_out.write(frame)
+            # if not video_out.isOpened():
+            #     raise RuntimeError(f"VideoWriter could not open")
+       
+            cv2.imshow("MediaPipe Mouth Detection", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                stop_event.set()
+                break
 
             if not audio_started:
                 audio_thread.start()
                 audio_started = True
 
-            # ADD for sync
-            # frame_end = time.time()
-            # elapsed = frame_end - frame_start
-            # delay = max(0, 0.05 - elapsed)
-            # time.sleep(delay)
+    
 
 
     finally:
         print("Cleaning up...")
+        stop_event.set()
     
         with open(f"./data/Dyad{name}/P{name}_{intervention_type}_output.json", "w") as f:
             json.dump({"Intervention Activity": intervention_activity, 
@@ -367,72 +441,7 @@ def record_video(intervention_type, name, audio_thread):
         cap.release()
         video_out.release()
         cv2.destroyAllWindows()
-
-
-
-def record_audio(audio_out, samplerate=44100, channels=1):
-
-    frames = []  # We'll collect chunks here
-
-    def callback(indata, frames_count, time_info, status):
-        if stop_event.is_set():
-            raise sd.CallbackStop()  # Stop the stream gracefully
-        frames.append(indata.copy())
-
-    with sd.InputStream(samplerate=samplerate, channels=channels, callback=callback):
-        print("Recording audio... Press Ctrl+C to stop early.")
-        while not stop_event.is_set():
-            time.sleep(0.1)  # Keep thread alive while recording
-
-    # Concatenate all chunks and write to a file
-    audio_data = np.concatenate(frames, axis=0)
-    sf.write(audio_out, audio_data, samplerate)
-    print(f"Audio saved: {audio_out}")
-
-
-
-
-def main():
-    global angles
- 
-
-    sim = "-s" in sys.argv
-    
-    if "-g" in sys.argv:
-        intervention_type = "gaze"
-        wizard = False
-    if "-swg" in sys.argv:
-        intervention_type = "speech_w_gaze"
-        wizard = True
-    elif "-v" in sys.argv:
-        intervention_type = "verbal"
-        wizard = True
-
-    name = input ("Participant number: ")
-    folder = Path(f"./data/Dyad{name}/")
-    folder.mkdir(parents=True, exist_ok=True)  # Creates the folder
-    video_path = f"./data/Dyad{name}/P{name}_{intervention_type}_video.mp4"
-    audio_path = f"./data/Dyad{name}/P{name}_{intervention_type}_audio.wav"
-    final_path = f"./data/Dyad{name}/P{name}_{intervention_type}_merged.mp4"
-
-    audio_thread = threading.Thread(target=record_audio, args=(audio_path,))
-    video_thread = threading.Thread(target = record_video, args = (intervention_type, name, audio_thread, ))
-    
-    video_thread.start()
-    
-
-    # initialize mic array 
-    if not sim:
-        device = usb.core.find(idVendor=0x2886, idProduct=0x0018)
-        if device is None:
-            raise ValueError("Device not found")
-        if device:
-            Mic_tuning = Tuning(device)
-            Mic_tuning.set_vad_threshold(5) # Modify this vad threshold based on ambient noises
-
-        receive_angle_thread = threading.Thread(target = receive_angles, args = (Mic_tuning, ))
-        receive_angle_thread.start()
-
+        
     try:
         while True:
             time.sleep(0.1)
@@ -444,17 +453,16 @@ def main():
         print("stop")
         if not sim:
             receive_angle_thread.join()
-        video_thread.join()
         audio_thread.join()
 
 
   
     
-    print("Merging with ffmpeg...")
-    subprocess.run([
-        'ffmpeg', '-y', '-i', video_path, '-i', audio_path,
-        '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental', final_path
-    ])
+    # print("Merging with ffmpeg...")
+    # subprocess.run([
+    #     'ffmpeg', '-y', '-i', video_path, '-i', audio_path,
+    #     '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental', final_path
+    # ])
 
       # stop_event.set()
     # if not sim:

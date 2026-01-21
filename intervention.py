@@ -44,7 +44,7 @@ pause_listener = None
 misty_ip = "10.214.154.217"
 
 items_round = "1"
-items_list = {"1": ["Safety razor shaving kit with mirror",
+items_list_verbose= {"1": ["Safety razor shaving kit with mirror",
     "An operating 4-battery flashlight",
     "3 pairs of snowshoes",
     "One aircraft inner tube for a 14-inch wheel (punctured)",
@@ -53,8 +53,8 @@ items_list = {"1": ["Safety razor shaving kit with mirror",
     "2": ["A gallon can of maple syrup",
     "A hand axe",
     "13 wood matches in a metal screwtop, waterproof container",
-    "A sleeping bag per person (arctic-type down filled with liner)",
-    "A 20 ft x 20 ft (7.5 m x 7.5 m) piece of heavy-duty canvas"
+    "A sleeping bag per person",
+    "A piece of heavy-duty canvas"
     ],
     
     "3": ["A book entitled Northern Star Navigation",
@@ -62,6 +62,27 @@ items_list = {"1": ["Safety razor shaving kit with mirror",
     "A bottle of water purification tablets",
     "A magnetic compass",
     "1/5 gallon Bacardi rum"
+    ]}
+
+
+items_list= {"1": ["Safety razor with mirror",
+    "A flashlight",
+    "3 pairs of snowshoes",
+    "Punctured aircraft inner tube",
+    "Nylon rope"],
+    
+    "2": ["Maple syrup",
+    "A hand axe",
+    "Wood matches with water proof container",
+    "Sleeping bags",
+    "Heavy-duty canvas"
+    ],
+    
+    "3": ["A book entitled Northern Star Navigation",
+    "An alarm clock",
+    "Water purification tablets",
+    "A magnetic compass",
+    "A Bacardi rum"
     ]}
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -147,13 +168,13 @@ def move_arm(pos= 0):
 
 
 def tilt_head(pnt):
-    current_response = misty.MoveHead(pitch, 20, yaw, 100, None, None)
+    current_response = misty.MoveHead(pitch, 20, yaw, 100, None, asynch=True)
     move_arm()
 
 
 
 def nod(pt):
-    current_response = misty.MoveHead(pitch  + 15 , 0, yaw, 99, None, None)
+    current_response = misty.MoveHead(pitch  + 15 , 0, yaw, 99, None, asynch=True)
     move_arm()
     time.sleep(0.15)
     current_response = misty.MoveHead(pitch - 15, 0, yaw, 99, None, None)
@@ -356,7 +377,7 @@ You are a helpful and informal conversation facilitator robot assisting two part
 
 You will be given a recent snippet of their conversation and the current list of survival items under discussion. Use this information to infer which item has been mentioned the least dynamically from their conversation.
 
-Answer with only the name of the least talked about item.
+Answer with only the name of the least talked about item. If they have talked about an item recently
 
 Transcription:
 {transcription}
@@ -455,7 +476,7 @@ def receiver_program():
         if pause_event.is_set():
             # interface is prompting behavior
             print("pause event set")
-            time.sleep(5)
+            pause_event.wait(timeout=0.1)
             pause_event.clear()
             continue 
 
@@ -479,7 +500,7 @@ def receiver_program():
                 if gaze_task_thread and gaze_task_thread.is_alive():
                     print("[Receiver] Interrupting current gaze task...")
                     stop_event.set()
-                    gaze_task_thread.join()
+                    gaze_task_thread.join() 
 
                 # Clear interrupt and start new task
                 stop_event.clear()
@@ -544,6 +565,9 @@ def execute_commands(tasks):
         func = globals()[func_name]
         func(params)
         time.sleep(total_sleep)
+        # for _ in range(int(total_sleep / 0.05)):
+        #     if pause_event.is_set(): return
+        #     time.sleep(0.05)
 
 
 def generate_behaviors(cmd):
@@ -608,31 +632,31 @@ def generate_behaviors(cmd):
 
         tasks.append(["set_eyes", 0.2, "happy"])
         tasks.append(["speak", 0.1, prompt])
-        tasks.append(["gaze", 0.5, pnt])
-        tasks.append(["gaze", 0.5, pt])
+        tasks.append(["gaze", 0.2, pnt])
+        tasks.append(["gaze", 0.2, pt])
         # tasks.append(["tilt_head",3, pt])
         tasks.append(["set_eyes", 0.2, "default"])
 
 
     elif cmd_type == "intro":
-        prompt = "It’s my pleasure to be the facilitator for your task today. You may think of me as a mediator for a group discussion. Sometimes I might jump in and ask you questions, other time I just observe."
-        tasks.append(["gaze", 0.5, pnt])
-        tasks.append(["gaze", 0.5, pt])
-        tasks.append(["speak", 1, prompt])
+        prompt = "It’s my pleasure to be the facilitator for your task today. You may think of me as a mediator for a group discussion. Sometimes I might jump in and ask you questions, other time I just observe. You may use the board to play out your thought process at anytime during the study."
+        tasks.append(["speak", 0.3, prompt])
+        tasks.append(["gaze", 0.2, pnt])
+        tasks.append(["gaze", 0.2, pt])
 
 
     elif cmd_type == "know":
         prompt = "I do know the correct ranking of these items based on expert advice. And I will be here to monitor your responses."
-        tasks.append(["gaze", 0.5, pnt])
-        tasks.append(["gaze", 0.5, pt])
-        tasks.append(["speak", 3, prompt])
-        tasks.append(["gaze", 0.5, middle])
+        tasks.append(["gaze", 0.2, pnt])
+        tasks.append(["gaze", 0.2, pt])
+        tasks.append(["speak", 0.2, prompt])
+        tasks.append(["gaze", 0.1, middle])
 
 
     elif cmd_type == "thank":
         prompt = "Thank you, shall we begin?"
         tasks.append(["speak", 0.3, prompt])
-        tasks.append(["gaze", 0.5, middle])
+        tasks.append(["gaze", 0.2, middle])
      
 
 
@@ -640,18 +664,18 @@ def generate_behaviors(cmd):
 
     # CONNECTION 
 
-    elif cmd_type == "last":
-        prompt = "Thank you guys for the last discussion. You guys did a great job. "
+    elif cmd_type == "last1":
+        prompt = "Thank you guys for the last discussion. You guys did a great job with the ranking. "
         tasks.append(["speak", 0.3, prompt])
         tasks.append(["gaze", 1, pt])
         tasks.append(["gaze", 1, pnt])
         tasks.append(["gaze", 0.1, pt])
     
-    elif cmd_type == "most":
-        prompt = "You got most of the items right last time. Congratulations."
+    elif cmd_type == "last2":
+        prompt = "Good discussion. Keep up the good work!"
         tasks.append(["speak", 0.3, prompt])
-        tasks.append(["gaze", 1, pnt])
-        tasks.append(["gaze", 1, pt])
+        tasks.append(["gaze", 0.2, pnt])
+        tasks.append(["gaze", 0.2, pt])
 
     
 
@@ -664,7 +688,8 @@ def generate_behaviors(cmd):
         else:
             pos = (0.7, 0.6)
 
-        prompt = f"Now it's time to discuss with your partner and agree on a shared ranking for the items. The discussion should be around 5 minutes. {player_id}, why don't you start first? "
+        # prompt = f"Now it's time to discuss with your partner and agree on a shared ranking for the items. The discussion should be around 5 minutes. {player_id}, why don't you start first? "
+        prompt = f"Now it's time to discuss with your partner and agree on a shared ranking for the items. Why don't you guys go ahead and start by sharing your top ranked item, and continue from there? "
         tasks.append(["speak", 0.2, prompt])
         tasks.append(["gaze", 1, pos])
         tasks.append(["gaze", 1, middle])
@@ -676,7 +701,7 @@ def generate_behaviors(cmd):
         else:
             pos = (0.7, 0.6)
 
-        prompt = f"Now take the next 5 minutes to discuss the new items together and decide on a shared list. {player_id}, you may begin."
+        prompt = f"Now take the next 5 minutes to discuss the new items together and decide on a shared list. You guys may begin with the items you think are the most useful and continue your thoughts from there."
         tasks.append(["speak", 0.2, prompt])
         tasks.append(["gaze", 1, pos])
         tasks.append(["gaze", 0.5, middle])
@@ -688,7 +713,7 @@ def generate_behaviors(cmd):
         else:
             pos = (0.7, 0.6)
 
-        prompt = f"You can begin the discussion now, {player_id}. Keep in mind you only have 5 minutes."
+        prompt = f"You can begin the discussion now. Keep in mind you only have 5 minutes. Feel free to start with the items you feel most strongly about and go from there."
         tasks.append(["speak", 0.2, prompt])
         tasks.append(["gaze", 1, pos])
         tasks.append(["gaze", 0.5, middle])
@@ -709,12 +734,12 @@ def generate_behaviors(cmd):
     elif cmd_type == "agreement":
         prompt = "Seems like you have reached an agreement. Good job. You may end the discussion now."
         tasks.append(["speak", 0.1, prompt])
-        tasks.append(["gaze", 1, middle])
+        tasks.append(["gaze", 0.6, middle])
 
-    elif cmd_type == "explain":
+    elif cmd_type == "explain_all":
         prompt = f"{player_id}, could you explain to me the main reasoning behind ranking all the items the way you did?"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 1, pnt])
+        tasks.append(["speak", 0.2, prompt])
+        tasks.append(["gaze", 0.5, pnt])
 
     elif cmd_type == "extra":
 
@@ -722,9 +747,9 @@ def generate_behaviors(cmd):
         extra_item_list.remove(item)
 
         prompt = "You guys still have a little bit time left. Now what would you do if I give you an extra item ---" + item
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 1, pnt])
-        tasks.append(["gaze", 1, pt])
+        tasks.append(["speak", 0.2, prompt])
+        tasks.append(["gaze", 0.3, pnt])
+        tasks.append(["gaze", 0.3, pt])
 
     elif cmd_type == "wrap":
         prompt = "That wraps up our discussion for this round. Thank you."
@@ -734,14 +759,14 @@ def generate_behaviors(cmd):
 
     # BASICS
     elif cmd_type == "yes":
-        prompt = "yes, that's right"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 1, pnt])
+        prompt = "Yes"
+        tasks.append(["speak", 0.2, prompt])
+        tasks.append(["gaze", 0.2, pnt])
 
     elif cmd_type == "no":
-        prompt = "nope, I don't think so"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 1, pnt])
+        prompt = "Not quite"
+        tasks.append(["speak", 0.2, prompt])
+        tasks.append(["gaze", 0.2, pnt])
 
     elif cmd_type == "idk":
         prompt = "Sorry, I don't know"
@@ -750,24 +775,24 @@ def generate_behaviors(cmd):
 
     elif cmd_type == "thankyou":
         prompt = "Thank you!"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 1, pnt])
-        tasks.append(["gaze", 1, pt])
-        tasks.append(["gaze", 1, middle])
+        tasks.append(["speak", 0.2, prompt])
+        tasks.append(["gaze", 0.2, pnt])
+        tasks.append(["gaze", 0.2, pt])
+        tasks.append(["gaze", 0.2, middle])
 
     elif cmd_type == "goodpoint":
         prompt = "That's a good point!"
         tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 1, middle])
+        tasks.append(["gaze", 0.3, middle])
 
     elif cmd_type == "back":
         prompt = random.choice(backchannel_prompts)
         backchannel_prompts.remove(prompt)
-        tasks.append(["nod", 0.3, pnt])
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 1, pnt])
-        tasks.append(["gaze", 1, pt])
-        tasks.append(["gaze", 1, middle])
+        tasks.append(["speak", 0.3, prompt])
+        tasks.append(["nod", 0.1, pnt])
+        tasks.append(["gaze", 0.7, pnt])
+        tasks.append(["gaze", 0.3, pt])
+        tasks.append(["gaze", 0.3, middle])
 
     
     elif cmd_type == "wbu":
@@ -786,22 +811,22 @@ def generate_behaviors(cmd):
 
     elif cmd_type == "buffer":
         prompt ='Hmmm.... I have quick question. '
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, middle])
+        tasks.append(["speak", 0.3, prompt])
+        tasks.append(["gaze", 0.5, pnt])
+        tasks.append(["gaze", 0.1, middle])
 
     elif cmd_type == "clarify":
         prompt ='Hmmm.... I want to clarify something quickly.'
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, middle])
+        tasks.append(["speak", 0.3, prompt])
+        tasks.append(["gaze", 0.5, pnt])
+        tasks.append(["gaze", 0.1, middle])
 
     elif cmd_type == "why":
-        prompt ='Why do you think so? '
+        prompt ='Why? '
         tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, pt])
-        tasks.append(["gaze", 1, middle])
+        tasks.append(["gaze", 0.5, pnt])
+        tasks.append(["gaze", 0.7, pt])
+        tasks.append(["gaze", 0.7, middle])
 
     elif cmd_type == "explain":
         prompt ='Could you explain to your partner why you think so?'
@@ -829,60 +854,75 @@ def generate_behaviors(cmd):
         last_transcription = ""
         with open("transcripts.txt", "r") as file:
             lines = file.readlines()
-            last_line_idx = len(lines)
-            last_four = lines[-8:]  # Get the last 3 lines
-            for line in last_four:
+            # last_line_idx = len(lines)
+            # last_four = lines[-8:] 
+            for line in lines:
                 last_transcription += line
         item = generate_where_question(last_transcription)
-        prompt = f"So {player_id}, where did you rank {item} " # (currently a filler)
+        prompt = f"So {player_id},  where did you rank {item} " # (currently a filler)
 
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
+        tasks.append(["speak", 0.1, prompt])
+        tasks.append(["gaze", 1, pnt])
         tasks.append(["gaze", 1, middle])
         tasks.append(["gaze", 1, pnt])
 
-    elif cmd_type == "generate":
-        last_transcription = ""
-        with open("transcripts.txt", "r") as file:
-            lines = file.readlines()
-            last_line_idx = len(lines)
-            last_four = lines[-8:]  # Get the last 3 lines
-            for line in last_four:
-                last_transcription += line
-        questions_list = generate_turn_taking_questions(last_transcription)
-        print(questions_list,"\n")
-        question = random.choice(questions_list)
-        prompt = f"{player_id}{question}"
-        tasks.append(["speak", 0.5, question])
-        print(question,"\n")
-
-    elif cmd_type == "warmth":
-        prompt = f"{player_id}, how would you handle staying warm if things get really tough?"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, pt])
+    elif cmd_type == "change":
+        prompt = "What changed your opinion?"
+        tasks.append(["speak", 0.1, prompt])
+        tasks.append(["gaze", 1, pnt])
         tasks.append(["gaze", 1, middle])
+        tasks.append(["gaze", 1, pnt])
 
-    elif cmd_type == "shelter":
-        prompt = f"{player_id}, how important is it, in your opinion, to find shelter?"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, pt])
+
+    elif cmd_type == "continue":
+        prompt = "You may continue."
+        tasks.append(["speak", 0.1, prompt])
+        tasks.append(["gaze", 1, pnt])
         tasks.append(["gaze", 1, middle])
+        tasks.append(["gaze", 1, pnt])
+
+    # elif cmd_type == "generate":
+    #     last_transcription = ""
+    #     with open("transcripts.txt", "r") as file:
+    #         lines = file.readlines()
+    #         last_line_idx = len(lines)
+    #         last_four = lines[-8:]  # Get the last 3 lines
+    #         for line in last_four:
+    #             last_transcription += line
+    #     questions_list = generate_turn_taking_questions(last_transcription)
+    #     print(questions_list,"\n")
+    #     question = random.choice(questions_list)
+    #     prompt = f"{player_id}{question}"
+    #     tasks.append(["speak", 0.5, question])
+    #     print(question,"\n")
+
+    # elif cmd_type == "warmth":
+    #     prompt = f"{player_id}, how would you handle staying warm if things get really tough?"
+    #     tasks.append(["speak", 0.5, prompt])
+    #     tasks.append(["gaze", 2, pnt])
+    #     tasks.append(["gaze", 1, pt])
+    #     tasks.append(["gaze", 1, middle])
+
+    # elif cmd_type == "shelter":
+    #     prompt = f"{player_id}, how important is it, in your opinion, to find shelter?"
+    #     tasks.append(["speak", 0.5, prompt])
+    #     tasks.append(["gaze", 2, pnt])
+    #     tasks.append(["gaze", 1, pt])
+    #     tasks.append(["gaze", 1, middle])
     
-    elif cmd_type == "food":
-        prompt = f"{player_id}, how do you guys plan to sustain yourselves until rescue? Is food necessary?"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, pt])
-        tasks.append(["gaze", 1, middle])
+    # elif cmd_type == "food":
+    #     prompt = f"{player_id}, how do you guys plan to sustain yourselves until rescue? Is food necessary?"
+    #     tasks.append(["speak", 0.5, prompt])
+    #     tasks.append(["gaze", 2, pnt])
+    #     tasks.append(["gaze", 1, pt])
+    #     tasks.append(["gaze", 1, middle])
 
-    elif cmd_type == "water":
-        prompt = f"{player_id}, what do you guys plan on doing for water? Is that an easily accessible resource?"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, pt])
-        tasks.append(["gaze", 1, middle])
+    # elif cmd_type == "water":
+    #     prompt = f"{player_id}, what do you guys plan on doing for water? Is that an easily accessible resource?"
+    #     tasks.append(["speak", 0.5, prompt])
+    #     tasks.append(["gaze", 2, pnt])
+    #     tasks.append(["gaze", 1, pt])
+    #     tasks.append(["gaze", 1, middle])
 
 
 

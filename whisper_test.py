@@ -10,7 +10,7 @@ import queue
 
 
 
-model = whisper.load_model("base")
+model = whisper.load_model("small")
 
 # Parameters for audio recording
 SAMPLE_RATE = 16000  # Whisper's expected sample rate
