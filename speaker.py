@@ -50,22 +50,27 @@ class Speaker():
         self.time_passed = 0
         self.position = position
         if position[0] > 0.5:
-            self.range = [190, 360]
+            self.position = (0.7, 0.6)
+            self.range = [200, 360]
             self.speaker_id = "Player 2"
             # self.speaker_id = ""
         else:
-            self.range = [0, 170]
+            self.position = (0.3, 0.6)
+            self.range = [0, 160]
             self.speaker_id = "Player 1"
             # self.speaker_id = ""
 
     # update lip distance for variability calculation
     def update_lip_movement(self, lip_moved):
         self.lip_moved = lip_moved
+        
     
     # check if participant is speaking via lip movement variability
     def check_if_talking(self, angles): # the list of all doa in the past segment 
         
         if self.lip_moved or any(self.range[0] <= angle <= self.range[1] for angle in angles):
+            if self.lip_moved:
+                print(self.speaker_id, "lips moved")
             self.is_talking = True
             self.total += 0.2
             self.cur_turn_len += 0.2

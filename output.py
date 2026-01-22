@@ -67,28 +67,36 @@ def connect_host():
 def detect_faces_and_lips(frame, face_mesh, w, h):
     results = face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     if not results.multi_face_landmarks:
-        return None, {}, {}
+        return None, None
 
     pos_list = defaultdict(list)
     lip_ratios = {}
-    for i, face_landmarks in enumerate(results.multi_face_landmarks):
-        upper_lip = np.array([face_landmarks.landmark[13].x * w, face_landmarks.landmark[13].y * h])
-        lower_lip = np.array([face_landmarks.landmark[14].x * w, face_landmarks.landmark[14].y * h])
-        top_edge = np.array([face_landmarks.landmark[10].x * w, face_landmarks.landmark[10].y * h])
-        bottom_edge = np.array([face_landmarks.landmark[152].x * w, face_landmarks.landmark[152].y * h])
+    if results.multi_face_landmarks:
+        sorted_faces = sorted(
+        results.multi_face_landmarks,
+        key=lambda face: np.mean([lm.x for lm in face.landmark])
+    )
+        for i, face_landmarks in enumerate(sorted_faces):
+            upper_lip = np.array([face_landmarks.landmark[13].x * w, face_landmarks.landmark[13].y * h])
+            lower_lip = np.array([face_landmarks.landmark[14].x * w, face_landmarks.landmark[14].y * h])
+            top_edge = np.array([face_landmarks.landmark[10].x * w, face_landmarks.landmark[10].y * h])
+            bottom_edge = np.array([face_landmarks.landmark[152].x * w, face_landmarks.landmark[152].y * h])
 
-        lip_distance = np.linalg.norm(upper_lip - lower_lip) / h
-        face_length = np.linalg.norm(top_edge - bottom_edge) / h
-        ratio = lip_distance / face_length
-        lip_ratios[i] = ratio
+            lip_distance = np.linalg.norm(upper_lip - lower_lip) / h
+            face_length = np.linalg.norm(top_edge - bottom_edge) / h
+            ratio = round(lip_distance / face_length, 5)
+            lip_ratios[i] = ratio 
+            
 
-        for landmark in [13, 14]:
-            x = int(face_landmarks.landmark[landmark].x * w)
-            y = int(face_landmarks.landmark[landmark].y * h)
-            pos_list[i] = (round(face_landmarks.landmark[landmark].x, 2), round(face_landmarks.landmark[landmark].y, 2))
-            cv2.circle(frame, (x, y), 2, (0, 255, 0), -1)
-
-    return results, lip_ratios, pos_list
+            for landmark in [13, 14]:
+                x = round(face_landmarks.landmark[landmark].x, 2)
+                y = round(face_landmarks.landmark[landmark].y, 2)
+                x_dot = int(x * w)
+                y_dot = int(y * h)
+                cv2.circle(frame, (x_dot, y_dot), 2, (0, 255, 0), -1)
+                pos_list[i] = (x, y)
+    
+    return lip_ratios, pos_list
 
 
 def process_speaking_variability(lip_distances, talking_variability_threshold, is_talking_dict):
@@ -212,7 +220,7 @@ def main():
     mp_face_mesh = mp.solutions.face_mesh
     confidence = 0.5
     face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=2, min_detection_confidence = confidence) # (static_image_mode=False, max_num_faces=2, min_detection_confidence = 0.5)
-    talking_variability_threshold = 0.03
+    talking_variability_threshold = 0.0045
 
     lip_distances = defaultdict(list)
     is_talking_dict = defaultdict(bool)
@@ -220,8 +228,8 @@ def main():
     segment_duration = 0.2 # is_talking decision is made based on lip variability and angles within segment_duration
     start_time = time.time()
 
-    speaker1 = Speaker("0")
-    speaker2 = Speaker("1")
+    speaker1 = Speaker("Player 0")
+    speaker2 = Speaker("Player 0")
     speaker_list = [speaker1, speaker2]
     speaker_created = False
     angles = []
@@ -259,40 +267,32 @@ def main():
         # Repeat to read from sensors 
         while True:
             ret, frame = cap.read()
-
-
             if not ret:
                 print("Failed to capture frame. Exiting...")
                 break
 
-            h, w, _ = frame.shape
+            h, w, _ = frame.shape    
+            frame = cv2.convertScaleAbs(frame, alpha=1.0, beta=50)
+            lip_ratios, pos_list = detect_faces_and_lips(frame, face_mesh, w, h)
 
             
-
-            # make the frame lighter 
-            # frame_float = frame.astype(np.float32)
-            # lighter_frame = cv2.add(frame_float, 50)
-            # frame = np.clip(lighter_frame, 0, 255).astype(np.uint8)
-            # frame = cv2.flip(frame, 1) # to mirror the frame      
-
-            frame = cv2.convertScaleAbs(frame, alpha=1.0, beta=50)
-
-
-
-            results, lip_ratios, pos_list = detect_faces_and_lips(frame, face_mesh, w, h)
 
             # initialization check 
             # once correctly intialized will skip this part
             if not speaker_created:
-                # time.sleep(0.3)
                 cam_failure +=1 
 
                 if not pos_list:
                     continue
 
+                if sim:
+                    create_speakers(pos_list, speaker_list)
+                    speaker_created = True
+                    voice_only = False
+
                 # if we already failed the camera initialization check, now fall back on voice activity 
                 # we initialize pos_list and is_talking_dict, by default we assume lips are moving 
-                voice_only = (cam_failure >= 100)
+                voice_only = (cam_failure >= 120)
                 if voice_only:
                     pos_list = [(0.3, 0.6), (0.7, 0.6)]
                     create_speakers(pos_list, speaker_list)
@@ -300,16 +300,13 @@ def main():
                     is_talking_dict[1] = False
                     speaker_created = True
                     print("Voice-only detection activated.")
-                    cv2.putText(frame,"Voice-only detection activated.", (10, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-                    
                     continue
 
                 # check how many faces are detected 
                 face_detected = len(pos_list)
 
                 if face_detected == 2: 
-                    correct_pos = (pos_list[0][0] < 0.5 and pos_list[1][0] > 0.5) or (pos_list[1][0] < 0.5 and pos_list[0][0] > 0.5)
+                    correct_pos = pos_list[0][0] < 0.5 and pos_list[1][0] > 0.5 # or (pos_list[1][0] < 0.5 and pos_list[0][0] > 0.5)
                     if correct_pos:
                         create_speakers(pos_list, speaker_list)
                         speaker_created = True
@@ -321,7 +318,7 @@ def main():
 
                 else: # less than 2 faces detected
                     confidence -= 0.05 # decrease the detection confidence and rerun 
-                    print('Only '+ str(face_detected) + " face detected.")
+                    # print('Only '+ str(face_detected) + " face detected.")
                     continue 
             
             
@@ -329,9 +326,10 @@ def main():
             # TEST
             # angles = receive_angles(Mic_tuning)
             # populate the lip_distances list with variations of lip movement during this segment
-            for i in lip_ratios:
-                ratio = lip_ratios[i]
-                lip_distances[i].append(ratio)
+            if lip_ratios is not None:
+                for i in lip_ratios:
+                    ratio = lip_ratios[i]
+                    lip_distances[i].append(ratio)
 
 
             current_time = time.time()
@@ -365,7 +363,6 @@ def main():
                     "name": name,
                     "condition": intervention_type,
                     "non_dom_id":controller.non_dom.speaker_id,
-                    
                     "overlap": controller.overlap,
                     "silence": controller.silence,
                     "speech_ratio": controller.speech_ratio,

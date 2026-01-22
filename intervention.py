@@ -35,6 +35,8 @@ yaw = 0
 
 stop_event = threading.Event()
 pause_event = threading.Event()
+run_gaze_event = threading.Event()
+run_gaze_event.set
 
 gaze_task_thread = None
 # ADD
@@ -419,10 +421,12 @@ def execute_gaze_tasks(gaze_tasks, stop_event):
         if stop_event.is_set():
             print("[Gaze Thread] Interrupted before task.")
             break
-
-        while pause_event.is_set():
-            print("[Gaze Thread] Paused.")
-            time.sleep(0.1)
+        
+        # CHANGED 
+        # while pause_event.is_set():
+        #     print("[Gaze Thread] Paused.")
+        #     time.sleep(0.1)
+        run_gaze_event.wait()
 
         try:
             [x, y] = task[1]
@@ -441,7 +445,7 @@ def execute_gaze_tasks(gaze_tasks, stop_event):
             elapsed = 0
             interval = 0.1  # 100ms chunks
             while elapsed < total_sleep:
-                if stop_event.is_set() or pause_event.is_set():
+                if stop_event.is_set() or not run_gaze_event.is_set():
                     print("[Gaze Thread] Interrupted during sleep.")
                     return
                 time.sleep(min(interval, total_sleep - elapsed))
@@ -473,13 +477,15 @@ def receiver_program():
         # conn, address = server_socket.accept()
         # print(f"Connection established with {address}")
 
-        if pause_event.is_set():
-            # interface is prompting behavior
-            print("pause event set")
-            pause_event.wait(timeout=0.1)
-            pause_event.clear()
-            continue 
+        # CHANGED
+        # if pause_event.is_set():
+        #     # interface is prompting behavior
+        #     print("pause event set")
+        #     pause_event.wait(timeout=0.1)
+        #     pause_event.clear()
+        #     continue 
 
+        run_gaze_event.wait()
 
         data = conn.recv(1024).decode('utf-8')
 
@@ -522,7 +528,7 @@ def receiver_program():
 
 # ADD
 def pause_listener():
-    global pause_event
+    global pause_event, run_gaze_event
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(('0.0.0.0', 6000))
     server.listen(1)
@@ -534,10 +540,9 @@ def pause_listener():
 
  
         if command:
-    
-            
+            run_gaze_event.set()
 
-            pause_event.set()
+            # pause_event.set()
             # if command == "resume":
             #     print("[Control] Resuming gaze.")
             #     pause_event.clear()
@@ -545,11 +550,11 @@ def pause_listener():
             # else:
             #     pause_event.set()
         
-            tasks = generate_behaviors(command)
+            tasks = generate_behaviors(command) # this is where we check for resume
             if not sim:
                 execute_commands(tasks)
-        else:
-            pause_event.clear()
+        # else:
+        #     pause_event.clear()
             
         conn.close()
 
@@ -571,11 +576,10 @@ def execute_commands(tasks):
 
 
 def generate_behaviors(cmd):
-    global items_list, items_round
+    global items_list, items_round, run_gaze_event
 
     print("command received: ", cmd)
     cmd = json.loads(cmd)
-    
     
 
     if isinstance(cmd, list):
@@ -590,6 +594,11 @@ def generate_behaviors(cmd):
         pnt = (0.3, 0.6)
         pt = (0.7, 0.6)
     
+    if cmd_type == "resume":
+        run_gaze_event.set()
+        print("Resuming Gaze Tasks")
+        return 
+
     if player_id == "Player 1":
         other_player = "Player 2"
     elif player_id == "Player 2":
@@ -615,7 +624,7 @@ def generate_behaviors(cmd):
         tasks.append(["gaze", 0.3, middle])
         tasks.append(["speak", 0.3, player_id])
 
-    if cmd_type == "hi":
+    elif cmd_type == "hi":
         hi = "Hi, I am misty! What are your names?"
         tasks.append(["gaze", 0.3, pt])
         tasks.append(["gaze", 0.3, pnt])

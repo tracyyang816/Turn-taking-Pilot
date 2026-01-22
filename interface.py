@@ -23,10 +23,10 @@ status_data = {
     "name":"test",
     "condition":"test",
     "non_dom_id":"Player 0",
-    "overlap": None,
-    "silence": None,
-    "speech_ratio": None,
-    "cur_time_passed": None,
+    "overlap": 0,
+    "silence": 0,
+    "speech_ratio": 0,
+    "cur_time_passed": 0,
     "dom_pos":(0.6,0.6),
     "nondom_pos": (0.4,0.6)
 }
@@ -53,10 +53,10 @@ def status():
     return jsonify({
         "overlap": status_data.get("overlap"),
         "silence": status_data.get("silence"),
+        "non_dom_id": status_data.get("non_dom_id"),
         "speech_ratio": status_data.get("speech_ratio"),
         "cur_time_passed": status_data.get("cur_time_passed"),
-        "dom_pos": status_data.get("dom_pos"),
-        "nondom_pos": status_data.get("nondom_pos"),
+       
     })
 
 
@@ -145,24 +145,25 @@ def set_quick_command():
 def send_command():
     global intervention_list
 
+    
+    command = request.form['command']
+
+    print (command, " command")
+
+
+    time_passed = status_data.get("cur_time_passed")
+    intervention_list.append([time_passed, command])
+    player_id = status_data.get("non_dom_id")
+
+    # ADD
+    custom_text = request.form.get('custom_text', '')  
+    if command == "send" and custom_text:
+        player_id = custom_text
+        # command = f"{command}:{custom_text}"  # or use a tuple/list
+
+    data = [command, player_id, tuple(status_data["nondom_pos"]), tuple(status_data["dom_pos"])]
+
     try:
-        command = request.form['command']
-
-        print (command, " command")
-
-
-        time_passed = status_data.get("cur_time_passed")
-        intervention_list.append([time_passed, command])
-        player_id = status_data.get("non_dom_id")
-
-        # ADD
-        custom_text = request.form.get('custom_text', '')  
-        if command == "send" and custom_text:
-            player_id = custom_text
-            # command = f"{command}:{custom_text}"  # or use a tuple/list
-
-        data = [command, player_id, tuple(status_data["nondom_pos"]), tuple(status_data["dom_pos"])]
-
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((robot_host, command_port))
             data_encoded = json.dumps(data).encode('utf-8')

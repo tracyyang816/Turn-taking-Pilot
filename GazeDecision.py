@@ -12,10 +12,10 @@ class GazeDecision:
         self.speaker1 = speaker1 # (ADD: in the study design make it the left)
         self.speaker2 = speaker2
 
-        self.pt = None
-        self.pnt = None
+        self.pt = speaker1
+        self.pnt = speaker2
 
-        self.pa = None
+        self.pa = speaker1
 
         # CHANGE: Just added these so the program doesn't crash
         # while sending payload to the interface
