@@ -22,7 +22,7 @@ from collections import defaultdict
 import threading 
 import sys
 import requests
-import openai
+from openai import OpenAI
 import re
 import os
 
@@ -36,7 +36,7 @@ yaw = 0
 stop_event = threading.Event()
 pause_event = threading.Event()
 run_gaze_event = threading.Event()
-run_gaze_event.set
+run_gaze_event.set()
 
 gaze_task_thread = None
 # ADD
@@ -45,48 +45,31 @@ pause_listener = None
 
 misty_ip = "10.214.154.217"
 
-items_round = "1"
-items_list_verbose= {"1": ["Safety razor shaving kit with mirror",
-    "An operating 4-battery flashlight",
-    "3 pairs of snowshoes",
-    "One aircraft inner tube for a 14-inch wheel (punctured)",
-    "250 ft (76 m) of 1⁄4-inch braided nylon rope, 50 lb. test"],
-    
-    "2": ["A gallon can of maple syrup",
-    "A hand axe",
-    "13 wood matches in a metal screwtop, waterproof container",
-    "A sleeping bag per person",
-    "A piece of heavy-duty canvas"
-    ],
-    
-    "3": ["A book entitled Northern Star Navigation",
-    "A wind-up alarm clock",
-    "A bottle of water purification tablets",
-    "A magnetic compass",
-    "1/5 gallon Bacardi rum"
-    ]}
+nums_round = 1
+topic_list = [
+"Do you think convenience has improved our lives overall, or has it reduced the quality of our experiences?",
+"Do you think success comes before happiness or after happiness?",
+"How much should we rely more on technology to guide everyday decisions, and how much should we trust human judgment instead?"]
 
 
-items_list= {"1": ["Safety razor with mirror",
-    "A flashlight",
-    "3 pairs of snowshoes",
-    "Punctured aircraft inner tube",
-    "Nylon rope"],
     
-    "2": ["Maple syrup",
-    "A hand axe",
-    "Wood matches with water proof container",
-    "Sleeping bags",
-    "Heavy-duty canvas"
-    ],
+intervention_list = [
+"Now, what do you guys think of the long-term outlook of accelerating convenience?",
+"I'm curious, what are your personal definitions of success and happiness?",
+"Before we continue, could you lay out some risks in overtrusting technology?"
+
+]
+
     
-    "3": ["A book entitled Northern Star Navigation",
-    "An alarm clock",
-    "Water purification tablets",
-    "A magnetic compass",
-    "A Bacardi rum"
-    ]}
-openai.api_key = os.getenv("OPENAI_API_KEY")
+round_3_list = [
+"Now, could you list some examples of tasks that machines would be better at vs. what humans are better at?",
+"I'm curious, do you see any ethical issues in using technology for making decisions?",
+"Before we continue, what are downsides of overtrusting humans?"
+
+]
+
+# openai.api_key = os.getenv("OPENAI_API_KEY")
+model = OpenAI()
 
 
 
@@ -103,16 +86,22 @@ backchannel_prompts = [
 ]
 
 
-extra_item_list = [ "Loaded point four five caliber pistol",
-    "Family size chocolate bars for each person",
-    "Ball of steel wool",
-    "Cigarette lighter without fluid"]
+buffer_prompts = [
+    "If I may jump in for a moment",
+    "i have a quick question",
+    "before moving on, I'm curious"
+  
+]
 
 
-nudges = ["It’s time to start concluding your discussion. Please try to reach an agreement.",
-    "Let’s move toward wrapping up. Can you come to a shared decision?",
-    "Please finalize your thoughts and try to reach a consensus.",
-    "Hey, let’s work on finding common ground and wrapping up."]
+
+past_interventions = []
+
+
+# nudges = ["It’s time to start concluding your discussion. Please try to reach an agreement.",
+#     "Let’s move toward wrapping up. Can you come to a shared decision?",
+#     "Please finalize your thoughts and try to reach a consensus.",
+#     "Hey, let’s work on finding common ground and wrapping up."]
 
 def list_misty_images():
     url = f"http://{misty_ip}/api/images/list"
@@ -159,10 +148,10 @@ def move_arm(pos= 0):
     
     elif pos > 0.5: # looking right 
         left = random.randint(65,75)
-        right = random.randint(25,45)
+        right = random.randint(30,50)
 
     else:
-        left = random.randint(25,45)
+        left = random.randint(30,50)
         right = random.randint(65,75)
 
     current_response = misty.MoveArms(left, right, 85)
@@ -170,13 +159,13 @@ def move_arm(pos= 0):
 
 
 def tilt_head(pnt):
-    current_response = misty.MoveHead(pitch, 20, yaw, 100, None, asynch=True)
+    current_response = misty.MoveHead(pitch, 20, yaw, 100, None, None)
     move_arm()
 
 
 
 def nod(pt):
-    current_response = misty.MoveHead(pitch  + 15 , 0, yaw, 99, None, asynch=True)
+    current_response = misty.MoveHead(pitch  + 15 , 0, yaw, 99, None, None)
     move_arm()
     time.sleep(0.15)
     current_response = misty.MoveHead(pitch - 15, 0, yaw, 99, None, None)
@@ -307,107 +296,118 @@ def generate_turn_taking_questions(transcription): # input is transcription of c
 
     #         Questions:"""
 
+    topic = topic_list[int(nums_round)-1]
     prompt = prompt = f"""
-You are a helpful and informal conversation facilitator robot assisting two participants in a subarctic survival activity. They are working together to rank a list of survival items in order of importance and come to an agreement. Your job is to help the conversation move forward by asking short, open-ended, and productive questions that:
+You are a helpful and informal conversation facilitator robot assisting two participants in a group conversation. They are discussing a topic of societal, personal, and philosophical depth. Your job is to help the conversation move forward by asking short, open-ended, and productive questions that:
 
 - Encourage equal participation and turn-taking
-- Prompt reflection on specific items, their functions, or challenges
+- Prompt reflection on specific talking points
 - Surface differing viewpoints in a non-confrontational way
 
-You will be given a recent snippet of their conversation and the current list of survival items under discussion. Use this information to generate three relevant questions based on the following **example templates**, the blanks and [challenge] are items you should dynamically infer from the conversation:
+You will be given a recent snippet of their conversation and the current topic under discussion. Use this information to generate three relevant questions based on the following example templates, the blanks are themes you should dynamically infer from the conversation:
 
-### Template Types
+Current topic: {topic}
 
-**Item Comparison Questions**  
-- “Do you think ___ is more crucial than ____ if [specific scenario or challenge] happens?”  
-- “If we had to choose between ____ and ____, which one do you think would help us more with [challenge]?”
+Below is the current transcription and topic question, try to identify key examples and themes in the conversation. 
+Use them to generate one specific and relevant key words to fill in blanks based on the templates below. Your goal is to ask thought provoking questions and add substance to the discussion.
 
-**Function-Based Questions**  
-- “What do you think is the most useful thing about the _____ in this situation?”  
-- “How exactly do you see the ____ helping us deal with [survival challenge]?”  
-- “Could the ____ be used for more than one thing out there?”
-
-**Challenge-Oriented Questions**  
-- “What’s the biggest danger we need to be ready for first — is it [challenge1] or [challenge2]?”  
-- “How prepared do you feel we’d be for [challenge] with the items we’ve ranked so far?”
-
-**Perspective-Eliciting Questions**  
-- “What made you put ____ higher/lower on the list — just curious?”  
-- “Do you see the _____ differently?"
-- “Has your view on the _____ changed after talking about it?”
-
-Below is the current transcription and item list. Use them to generate three specific and relevant questions based on the above templates. Only output the top 3 questions.
 
 Transcription:
 {transcription}
+
+
+### Question Templates: Fill in these blanks with a phrase that is concise.
+
+
+
+You have argued for ___. do you guys want to speak about what the opposite side might say?
+You guys didn't say much about _____. does that feels important?”
+Could you list some examples for _____?
+
+
 
 
 Questions:
 """
 
+# I like your idea about _____ . Can you talk more about that?
+# Do you guys want to speak more about the ______ side of ______?
 # "You haven't talked much about _____, what do think are some potential uses for it?"
 
-    item_list = items_list[items_round]
+    # item_list = items_list[items_round]
 # Items: {item_list}
 
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=150
+    response = model.chat.completions.create(
+    model="gpt-4.1-mini",
+    messages=[
+        {"role": "user", "content": prompt}
+    ],
+    temperature=0.7,
+    max_tokens=1000,
     )
 
-    questions = response['choices'][0]['message']['content'].strip()
-    questions_list = split_questions(questions)
-    return questions_list
+    # questions = response['choices'][0]['message']['content'].strip()
+    # questions_list = split_questions(questions)
+    questions_list = split_questions(response.choices[0].message.content.strip())
+    print(questions_list)
+    idx = random.randint(0,len(questions_list)-1)
+    question = questions_list[idx]
+    return question
+    # return questions_list
 
 
+def generate_buffer(): # input is transcription of convo
+    transcription = ""
+    with open("transcripts.txt", "r") as file:
+        lines = file.readlines()
+        for line in lines:
+            transcription += line
+    topic = topic_list[int(nums_round)-1]
 
-def generate_where_question(transcription): 
-    
-    
-    
-    item_list = items_list[items_round]
-  
+    intervention = intervention_list[int(nums_round)-1]
+    prompt = prompt = f"""
+You are a helpful and informal conversation facilitator robot assisting two participants in a group discussion. 
+Your job is to help the conversation flow naturally by adding a buffer to relate to the context of there current conversation before asking the next question:
 
-    prompt  = f"""
-You are a helpful and informal conversation facilitator robot assisting two participants in a subarctic survival activity. They are working together to rank a list of survival items in order of importance and come to an agreement. Your job is to help the conversation move forward by inquiring them about an item that has not been brought up or talked about least frequently in the conversation.
+You will be given a recent snippet of their conversation and the current topic under discussion, as well as the follow-up question you will ask. 
+Use this information to generate a buffer phrase based on the following example templates, 
+the blanks are themes you should dynamically infer from the conversation. 
+
+Current topic: {topic}
 
 
-You will be given a recent snippet of their conversation and the current list of survival items under discussion. Use this information to infer which item has been mentioned the least dynamically from their conversation.
+### Buffer Phrase Templates:
+You guys made some good points about ______.
+I like your thoughts on _____.
+I really enjoyed your perspectives so far on ______.
 
-Answer with only the name of the least talked about item. If they have talked about an item recently
+Follow up question: {intervention}
+
+Below is the current transcription and topic question, try to fill in the blank in a way such that it is concise and essential to points made in their discussion so far. Make sure they are concise but thoughtful, not something superficial, but use oral phrases.
+Use them to generate one specific and relevant phrases based on the above templates. Only output the most appropriate sentence.
 
 Transcription:
 {transcription}
 
-
-Item list = {item_list}
-
-Selected item:
+Buffer phrase:
 
 """
 
-# "You haven't talked much about _____, what do think are some potential uses for it?"
-
-# Items: {item_list}
-
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=150
+    response = model.chat.completions.create(
+    model="gpt-4.1-mini",
+    messages=[
+        {"role": "user", "content": prompt}
+    ],
+    temperature=0.7,
+    max_tokens=1000,
     )
 
-    item = response['choices'][0]['message']['content'].strip()
-    return item
-
+    
+    #buffer_phrase = split_questions(response.choices[0].message.content.strip())
+    buffer_phrase = response.choices[0].message.content.strip()
+    print(buffer_phrase)
+    return buffer_phrase
 
 
 def execute_gaze_tasks(gaze_tasks, stop_event):
@@ -433,6 +433,7 @@ def execute_gaze_tasks(gaze_tasks, stop_event):
             
             move_head(x, y)
             move_arm(x)
+            # move_arm(x) # moving arm aggresively according to which side we are turning 
             # if x < 0.4:
             #     set_eyes("look left")
             # elif x > 0.6: 
@@ -485,7 +486,7 @@ def receiver_program():
         #     pause_event.clear()
         #     continue 
 
-        run_gaze_event.wait()
+        # run_gaze_event.wait()
 
         data = conn.recv(1024).decode('utf-8')
 
@@ -500,11 +501,11 @@ def receiver_program():
             gaze_tasks = json.loads(data)
     
             if len(gaze_tasks) > 0:
-                print("[Receiver] New commands received!")
+                # print("[Receiver] New commands received!")
 
                 # If there's a running thread, interrupt it
                 if gaze_task_thread and gaze_task_thread.is_alive():
-                    print("[Receiver] Interrupting current gaze task...")
+                    # print("[Receiver] Interrupting current gaze task...")
                     stop_event.set()
                     gaze_task_thread.join() 
 
@@ -515,9 +516,11 @@ def receiver_program():
                 
 
         except json.JSONDecodeError:
-            print("[Receiver] Failed to decode JSON")
+            # print("[Receiver] Failed to decode JSON")
+            pass 
         except TypeError:
-            print("[Receiver] TypeError in received data.")
+            # print("[Receiver] TypeError in received data.")
+            pass
 
         # conn.close()
 
@@ -540,7 +543,7 @@ def pause_listener():
 
  
         if command:
-            run_gaze_event.set()
+            run_gaze_event.clear()
 
             # pause_event.set()
             # if command == "resume":
@@ -556,7 +559,7 @@ def pause_listener():
         # else:
         #     pause_event.clear()
             
-        conn.close()
+        # conn.close()
 
 
 
@@ -576,7 +579,9 @@ def execute_commands(tasks):
 
 
 def generate_behaviors(cmd):
-    global items_list, items_round, run_gaze_event
+
+
+    global topic_list, nums_round, run_gaze_event
 
     print("command received: ", cmd)
     cmd = json.loads(cmd)
@@ -597,7 +602,7 @@ def generate_behaviors(cmd):
     if cmd_type == "resume":
         run_gaze_event.set()
         print("Resuming Gaze Tasks")
-        return 
+        return []
 
     if player_id == "Player 1":
         other_player = "Player 2"
@@ -615,7 +620,7 @@ def generate_behaviors(cmd):
     # LIST
 
     if cmd_type == "1" or cmd_type == "2" or cmd_type == "3":
-        items_round = cmd_type
+        nums_round = cmd_type
 
             
     # TEXT BOX
@@ -632,6 +637,7 @@ def generate_behaviors(cmd):
 
         tasks.append(["speak", 0, hi])
         tasks.append(["gaze", 0.4, pnt])
+        tasks.append(["gaze", 0.4, middle])
         # tasks.append(["tilt_head", 1, pt])
 
 
@@ -643,144 +649,126 @@ def generate_behaviors(cmd):
         tasks.append(["speak", 0.1, prompt])
         tasks.append(["gaze", 0.2, pnt])
         tasks.append(["gaze", 0.2, pt])
+        tasks.append(["gaze", 0.2, middle])
         # tasks.append(["tilt_head",3, pt])
         tasks.append(["set_eyes", 0.2, "default"])
 
 
     elif cmd_type == "intro":
-        prompt = "It’s my pleasure to be the facilitator for your task today. You may think of me as a mediator for a group discussion. Sometimes I might jump in and ask you questions, other time I just observe. You may use the board to play out your thought process at anytime during the study."
+        prompt = "It’s my pleasure to be the facilitator for your task today. You may think of me as a mediator for a group discussion. Sometimes I might jump in and ask you questions, other time I just observe. "
         tasks.append(["speak", 0.3, prompt])
         tasks.append(["gaze", 0.2, pnt])
         tasks.append(["gaze", 0.2, pt])
 
 
-    elif cmd_type == "know":
-        prompt = "I do know the correct ranking of these items based on expert advice. And I will be here to monitor your responses."
-        tasks.append(["gaze", 0.2, pnt])
-        tasks.append(["gaze", 0.2, pt])
-        tasks.append(["speak", 0.2, prompt])
-        tasks.append(["gaze", 0.1, middle])
-
 
     elif cmd_type == "thank":
-        prompt = "Thank you, shall we begin?"
+        prompt = "Keep in mind to discuss comprehensively but also try to reach an overall agreement in this brief discussion of around 5 minutes. Thank you. Shall we begin? "
         tasks.append(["speak", 0.3, prompt])
         tasks.append(["gaze", 0.2, middle])
      
 
 
-
+    elif cmd_type == "lookaround":
+        tasks.append(["gaze", 1, left])
+        tasks.append(["gaze", 1, right])
+        tasks.append(["gaze", 1, left])
+        tasks.append(["gaze", 0.1, middle])
 
     # CONNECTION 
 
-    elif cmd_type == "last1":
-        prompt = "Thank you guys for the last discussion. You guys did a great job with the ranking. "
+    elif cmd_type == "open1":
+        prompt = "Please go ahead and discuss this topic with your partner: Do you think convenience has improved our lives overall, or has it reduced the quality of our experiences?”"
         tasks.append(["speak", 0.3, prompt])
         tasks.append(["gaze", 1, pt])
         tasks.append(["gaze", 1, pnt])
-        tasks.append(["gaze", 0.1, pt])
-    
-    elif cmd_type == "last2":
-        prompt = "Good discussion. Keep up the good work!"
-        tasks.append(["speak", 0.3, prompt])
-        tasks.append(["gaze", 0.2, pnt])
-        tasks.append(["gaze", 0.2, pt])
+        tasks.append(["gaze", 0.1, middle])
 
-    
-
-    # OPEN (INTERVENTION)
-
-    elif cmd_type == "open1":
-        player_id = random.choice(["Player 1", "Player 2"])
-        if player_id == "Player 1":
-            pos = (0.3, 0.6)
-        else:
-            pos = (0.7, 0.6)
-
-        # prompt = f"Now it's time to discuss with your partner and agree on a shared ranking for the items. The discussion should be around 5 minutes. {player_id}, why don't you start first? "
-        prompt = f"Now it's time to discuss with your partner and agree on a shared ranking for the items. Why don't you guys go ahead and start by sharing your top ranked item, and continue from there? "
-        tasks.append(["speak", 0.2, prompt])
-        tasks.append(["gaze", 1, pos])
-        tasks.append(["gaze", 1, middle])
-    
     elif cmd_type == "open2":
-        player_id = random.choice(["Player 1", "Player 2"])
-        if player_id == "Player 1":
-            pos = (0.3, 0.6)
-        else:
-            pos = (0.7, 0.6)
-
-        prompt = f"Now take the next 5 minutes to discuss the new items together and decide on a shared list. You guys may begin with the items you think are the most useful and continue your thoughts from there."
-        tasks.append(["speak", 0.2, prompt])
-        tasks.append(["gaze", 1, pos])
-        tasks.append(["gaze", 0.5, middle])
+        prompt = "I really liked some of your inputs last round. Now please go ahead and discuss this topic with your partner: Do you think success comes before happiness or after happiness?”"
+        tasks.append(["speak", 0.3, prompt])
+        tasks.append(["gaze", 1, pt])
+        tasks.append(["gaze", 1, pnt])
+        tasks.append(["gaze", 0.1, middle])
+    
 
     elif cmd_type == "open3":
-        player_id = random.choice(["Player 1", "Player 2"])
-        if player_id == "Player 1":
-            pos = (0.3, 0.6)
-        else:
-            pos = (0.7, 0.6)
+        prompt = "I enjoyed listening to your ideas. Now let's talk about your thoughts on this topic:  How much should we rely more on technology to guide everyday decisions, and how much should we trust human judgment instead?" 
+        tasks.append(["speak", 0.3, prompt])
+        tasks.append(["gaze", 1, pt])
+        tasks.append(["gaze", 1, pnt])
+        tasks.append(["gaze", 0.1, middle])
 
-        prompt = f"You can begin the discussion now. Keep in mind you only have 5 minutes. Feel free to start with the items you feel most strongly about and go from there."
+    elif cmd_type == "buffer":
+        prompt = random.choice(buffer_prompts)
+        buffer_prompts.remove(prompt)
+        tasks.append(["speak", 0.3, prompt])
+        tasks.append(["gaze", 1, pt])
+        tasks.append(["gaze", 1, pnt])
+        tasks.append(["gaze", 0.1, middle])
+
+
+    elif cmd_type == "q1":
+        buffer = generate_buffer()
+
+        buffer = buffer.replace("*", "")
+
+        # prompt = f"Now it's time to discuss with your partner and agree on a shared ranking for the items. The discussion should be around 5 minutes. {player_id}, why don't you start first? "
+        prompt = f"{buffer}. Now. What do you guys think of the long-term outlook of accelerating convenience? "
         tasks.append(["speak", 0.2, prompt])
-        tasks.append(["gaze", 1, pos])
+        tasks.append(["gaze", 1, middle])
+        tasks.append(["gaze", 1, middle])
+    
+    elif cmd_type == "q2":
+        buffer = generate_buffer()
+     
+        prompt = f"{buffer}. I'm curious. What are your personal definitions of success and happiness?"
+        tasks.append(["speak", 0.2, prompt])
+        tasks.append(["gaze", 1, middle])
         tasks.append(["gaze", 0.5, middle])
 
-
-    # TIME
-    elif cmd_type == "1min":
-        prompt = "You guys have about 1 minute left to reach an agreement."
-        tasks.append(["speak", 0.1, prompt])
-        tasks.append(["gaze", 1, middle])
-
-    elif cmd_type == "nudge":
-        prompt = random.choice(nudges)
-        nudges.remove(prompt)
-        tasks.append(["speak", 0.1, prompt])
-        tasks.append(["gaze", 1, middle])
-    
-    elif cmd_type == "agreement":
-        prompt = "Seems like you have reached an agreement. Good job. You may end the discussion now."
-        tasks.append(["speak", 0.1, prompt])
-        tasks.append(["gaze", 0.6, middle])
-
-    elif cmd_type == "explain_all":
-        prompt = f"{player_id}, could you explain to me the main reasoning behind ranking all the items the way you did?"
+    elif cmd_type == "q3":
+        buffer = generate_buffer()
+        prompt = f"{buffer}. Before we continue. Could you lay out some risks in overtrusting technology or overtrusting humans?"
         tasks.append(["speak", 0.2, prompt])
-        tasks.append(["gaze", 0.5, pnt])
-
-    elif cmd_type == "extra":
-
-        item = random.choice(extra_item_list)
-        extra_item_list.remove(item)
-
-        prompt = "You guys still have a little bit time left. Now what would you do if I give you an extra item ---" + item
-        tasks.append(["speak", 0.2, prompt])
-        tasks.append(["gaze", 0.3, pnt])
-        tasks.append(["gaze", 0.3, pt])
-
-    elif cmd_type == "wrap":
-        prompt = "That wraps up our discussion for this round. Thank you."
-        tasks.append(["speak", 0.5, prompt])
         tasks.append(["gaze", 1, middle])
-    
+        tasks.append(["gaze", 0.5, middle])
+
+    elif cmd_type == "generate":
+        last_transcription = ""
+        with open("transcripts.txt", "r") as file:
+            lines = file.readlines()
+            # last_line_idx = len(lines)
+            # last_four = lines[-8:] 
+            for line in lines:
+                last_transcription += line
+        prompt = generate_turn_taking_questions(last_transcription)
+        print(prompt)
+        prompt = prompt.replace("*", "")
+        tasks.append(["speak", 0.1, prompt])
+        tasks.append(["gaze", 2, pnt])
+        tasks.append(["gaze", 1, middle])
+        tasks.append(["gaze", 1, pnt])
+
 
     # BASICS
     elif cmd_type == "yes":
         prompt = "Yes"
+        tasks.append(["gaze", 0.1, middle])
         tasks.append(["speak", 0.2, prompt])
-        tasks.append(["gaze", 0.2, pnt])
+        
 
     elif cmd_type == "no":
         prompt = "Not quite"
+        tasks.append(["gaze", 0.1, middle])
         tasks.append(["speak", 0.2, prompt])
-        tasks.append(["gaze", 0.2, pnt])
+   
 
     elif cmd_type == "idk":
         prompt = "Sorry, I don't know"
+        tasks.append(["gaze", 0.1, middle])
         tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 1, pnt])
+        
 
     elif cmd_type == "thankyou":
         prompt = "Thank you!"
@@ -788,25 +776,26 @@ def generate_behaviors(cmd):
         tasks.append(["gaze", 0.2, pnt])
         tasks.append(["gaze", 0.2, pt])
         tasks.append(["gaze", 0.2, middle])
+        run_gaze_event.set()
+        print("Resuming Gaze Tasks")
 
     elif cmd_type == "goodpoint":
         prompt = "That's a good point!"
         tasks.append(["speak", 0.5, prompt])
         tasks.append(["gaze", 0.3, middle])
+        run_gaze_event.set()
+        print("Resuming Gaze Tasks")
 
     elif cmd_type == "back":
         prompt = random.choice(backchannel_prompts)
         backchannel_prompts.remove(prompt)
         tasks.append(["speak", 0.3, prompt])
-        tasks.append(["nod", 0.1, pnt])
-        tasks.append(["gaze", 0.7, pnt])
-        tasks.append(["gaze", 0.3, pt])
         tasks.append(["gaze", 0.3, middle])
 
     
     elif cmd_type == "wbu":
         wbu = random.choice(["What about you?", "What do you think?", "Do you agree?"])
-        prompt = f"{other_player}{wbu}"
+        prompt = f"{wbu}"
         tasks.append(["speak", 0.1, prompt])
         tasks.append(["gaze", 1.5, pt])
         tasks.append(["gaze", 1, pnt])
@@ -816,123 +805,20 @@ def generate_behaviors(cmd):
         prompt = "Byeee"
         tasks.append(["speak", 0.5, prompt])
 
+    elif cmd_type == "wrap":
+        prompt = "great, you guys may wrap up the discussion now."
+        tasks.append(["speak", 0.1, prompt])
+
     # OPEN-ENDED
 
-    elif cmd_type == "buffer":
-        prompt ='Hmmm.... I have quick question. '
-        tasks.append(["speak", 0.3, prompt])
-        tasks.append(["gaze", 0.5, pnt])
-        tasks.append(["gaze", 0.1, middle])
-
-    elif cmd_type == "clarify":
-        prompt ='Hmmm.... I want to clarify something quickly.'
-        tasks.append(["speak", 0.3, prompt])
-        tasks.append(["gaze", 0.5, pnt])
-        tasks.append(["gaze", 0.1, middle])
-
-    elif cmd_type == "why":
-        prompt ='Why? '
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 0.5, pnt])
-        tasks.append(["gaze", 0.7, pt])
-        tasks.append(["gaze", 0.7, middle])
-
-    elif cmd_type == "explain":
-        prompt ='Could you explain to your partner why you think so?'
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, pt])
-        tasks.append(["gaze", 1, middle])
-
-    elif cmd_type == "skill":
-        prompt = f"{player_id}, what’s one skill you think is super important for surviving in the subarctic?"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, pt])
-        tasks.append(["gaze", 1, middle])
-
-    elif cmd_type == "challenge":
-        prompt = f"{player_id}, what do you think is the biggest challenge we’ll face out here?"
-        tasks.append(["speak", 0.5, prompt])
-        tasks.append(["gaze", 2, pnt])
-        tasks.append(["gaze", 1, pt])
-        tasks.append(["gaze", 1, middle])
-
-
-    elif cmd_type == "where":
-        last_transcription = ""
-        with open("transcripts.txt", "r") as file:
-            lines = file.readlines()
-            # last_line_idx = len(lines)
-            # last_four = lines[-8:] 
-            for line in lines:
-                last_transcription += line
-        item = generate_where_question(last_transcription)
-        prompt = f"So {player_id},  where did you rank {item} " # (currently a filler)
-
-        tasks.append(["speak", 0.1, prompt])
-        tasks.append(["gaze", 1, pnt])
-        tasks.append(["gaze", 1, middle])
-        tasks.append(["gaze", 1, pnt])
-
-    elif cmd_type == "change":
-        prompt = "What changed your opinion?"
-        tasks.append(["speak", 0.1, prompt])
-        tasks.append(["gaze", 1, pnt])
-        tasks.append(["gaze", 1, middle])
-        tasks.append(["gaze", 1, pnt])
-
+    
 
     elif cmd_type == "continue":
         prompt = "You may continue."
         tasks.append(["speak", 0.1, prompt])
-        tasks.append(["gaze", 1, pnt])
         tasks.append(["gaze", 1, middle])
-        tasks.append(["gaze", 1, pnt])
-
-    # elif cmd_type == "generate":
-    #     last_transcription = ""
-    #     with open("transcripts.txt", "r") as file:
-    #         lines = file.readlines()
-    #         last_line_idx = len(lines)
-    #         last_four = lines[-8:]  # Get the last 3 lines
-    #         for line in last_four:
-    #             last_transcription += line
-    #     questions_list = generate_turn_taking_questions(last_transcription)
-    #     print(questions_list,"\n")
-    #     question = random.choice(questions_list)
-    #     prompt = f"{player_id}{question}"
-    #     tasks.append(["speak", 0.5, question])
-    #     print(question,"\n")
-
-    # elif cmd_type == "warmth":
-    #     prompt = f"{player_id}, how would you handle staying warm if things get really tough?"
-    #     tasks.append(["speak", 0.5, prompt])
-    #     tasks.append(["gaze", 2, pnt])
-    #     tasks.append(["gaze", 1, pt])
-    #     tasks.append(["gaze", 1, middle])
-
-    # elif cmd_type == "shelter":
-    #     prompt = f"{player_id}, how important is it, in your opinion, to find shelter?"
-    #     tasks.append(["speak", 0.5, prompt])
-    #     tasks.append(["gaze", 2, pnt])
-    #     tasks.append(["gaze", 1, pt])
-    #     tasks.append(["gaze", 1, middle])
-    
-    # elif cmd_type == "food":
-    #     prompt = f"{player_id}, how do you guys plan to sustain yourselves until rescue? Is food necessary?"
-    #     tasks.append(["speak", 0.5, prompt])
-    #     tasks.append(["gaze", 2, pnt])
-    #     tasks.append(["gaze", 1, pt])
-    #     tasks.append(["gaze", 1, middle])
-
-    # elif cmd_type == "water":
-    #     prompt = f"{player_id}, what do you guys plan on doing for water? Is that an easily accessible resource?"
-    #     tasks.append(["speak", 0.5, prompt])
-    #     tasks.append(["gaze", 2, pnt])
-    #     tasks.append(["gaze", 1, pt])
-    #     tasks.append(["gaze", 1, middle])
-
+        run_gaze_event.set()
+        print("Resuming Gaze Tasks")
 
 
 

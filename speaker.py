@@ -51,12 +51,12 @@ class Speaker():
         self.position = position
         if position[0] > 0.5:
             self.position = (0.7, 0.6)
-            self.range = [200, 360]
+            self.range = [270, 360]
             self.speaker_id = "Player 2"
             # self.speaker_id = ""
         else:
             self.position = (0.3, 0.6)
-            self.range = [0, 160]
+            self.range = [0, 90]
             self.speaker_id = "Player 1"
             # self.speaker_id = ""
 
@@ -69,8 +69,8 @@ class Speaker():
     def check_if_talking(self, angles): # the list of all doa in the past segment 
         
         if self.lip_moved or any(self.range[0] <= angle <= self.range[1] for angle in angles):
-            if self.lip_moved:
-                print(self.speaker_id, "lips moved")
+            # if self.lip_moved:
+                #print(self.speaker_id, "lips moved")
             self.is_talking = True
             self.total += 0.2
             self.cur_turn_len += 0.2

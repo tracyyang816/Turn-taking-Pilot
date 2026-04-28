@@ -25,7 +25,7 @@ import sys
 from speaker import Speaker
 import threading
 import random
-from VerbalDecision import VerbalDecision
+# from VerbalDecision import VerbalDecision
 from GazeDecision import GazeDecision
 
 from doa_tuning import Tuning
@@ -103,8 +103,6 @@ def process_speaking_variability(lip_distances, talking_variability_threshold, i
     for i in lip_distances:
         variability = np.std(lip_distances[i])
         is_talking = (variability > talking_variability_threshold)
-        if is_talking:
-            print(i, "lip talking")
         is_talking_dict[i] = is_talking
         lip_distances[i] = []
 
@@ -193,6 +191,7 @@ def main():
         intervention_type = "verbal"
         wizard = True
 
+    
     name = input ("Participant number: ")
     folder = Path(f"./data/Dyad{name}/")
     folder.mkdir(parents=True, exist_ok=True)  # Creates the folder
@@ -201,8 +200,8 @@ def main():
     final_path = f"./data/Dyad{name}/P{name}_{intervention_type}_merged.mp4"
 
     audio_thread = threading.Thread(target = record_audio, args=(audio_path,))
-   
-    
+
+
     # initialize mic array 
     if not sim:
         device = usb.core.find(idVendor=0x2886, idProduct=0x0018)
@@ -210,17 +209,18 @@ def main():
             raise ValueError("Device not found")
         if device:
             Mic_tuning = Tuning(device)
-            Mic_tuning.set_vad_threshold(5) # Modify this vad threshold based on ambient noises
+            Mic_tuning.set_vad_threshold(8) # threshold based on ambient noises
 
         receive_angle_thread = threading.Thread(target = receive_angles, args = (Mic_tuning, ))
         receive_angle_thread.start()
+
 
     global angles
 
     mp_face_mesh = mp.solutions.face_mesh
     confidence = 0.5
     face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=2, min_detection_confidence = confidence) # (static_image_mode=False, max_num_faces=2, min_detection_confidence = 0.5)
-    talking_variability_threshold = 0.0045
+    talking_variability_threshold = 0.0055
 
     lip_distances = defaultdict(list)
     is_talking_dict = defaultdict(bool)
@@ -320,9 +320,9 @@ def main():
                     confidence -= 0.05 # decrease the detection confidence and rerun 
                     # print('Only '+ str(face_detected) + " face detected.")
                     continue 
+                    
             
             
-
             # TEST
             # angles = receive_angles(Mic_tuning)
             # populate the lip_distances list with variations of lip movement during this segment
@@ -352,8 +352,8 @@ def main():
 
                 # ADD: Send to interface 
                 if intervention_type == "verbal":
-                    dom_pos =  (0.45 + 0.01 * random.randint(0, 10), 0.6)
-                    nondom_pos = (0.45 + 0.01 * random.randint(0, 10), 0.6)
+                    dom_pos =  (0.47 + 0.01 * random.randint(0, 6), 0.6)
+                    nondom_pos = (0.47 + 0.01 * random.randint(0, 6), 0.6)
                 else:
                     dom_pos = controller.dom.position
                     nondom_pos = controller.non_dom.position
@@ -374,8 +374,6 @@ def main():
                     status_socket.sendall((json.dumps(status_payload) + "\n").encode())
                 except:
                     pass  # Don’t crash on failure
-
-                print("angles: ", angles)
 
                 # Misty Logs
                 intervention_activity.append((time_passed, tasks))

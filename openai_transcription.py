@@ -58,6 +58,9 @@ HOP_SEC = 3  # overlap
 
 last_flush = time.time()
 
+with open("transcripts.txt", "w") as f:
+    f.write("")
+
 try:
     while True:
         try:

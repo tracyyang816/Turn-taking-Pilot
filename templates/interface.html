@@ -92,8 +92,10 @@
         {% endif %}
     </p>
 
+    <p><b>Turn-relevant place:</b> <span id="trp">{{ trp }}</span></p>
+
     <!-- <p><b>Dominant Position:</b> <span id="dom_pos">{{ dom_pos }}</span></p> -->
-    <p><b>Non-dominant Player:</b> <span id="non_dom_id">{{ non_dom_id }}</span></p>
+    <p><b>Non-dominant Speaker:</b> <span id="non_dom_id">{{ non_dom_id }}</span></p>
 </div>
 
 
@@ -164,45 +166,33 @@
                     <button name="command" value="hi">Hi</button>
                     <button name="command" value="nice">Nice</button>
                     <button name="command" value="intro">Intro</button>
-                    <button name="command" value="know">Know</button>
                     <button name="command" value="thank">Thank</button>
                 </div>
             </div>
 
             <div class="section">
-                <h2>Connection</h2>
-                <div class="button-group">
-                    <button name="command" value="last1">Last1</button>
-                    <button name="command" value="last2">Last2</button>
-
-                    <button name="command" value="default">Default</button>
-                    <button name="command" value="sleep">Sleep</button>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>Open</h2>
+                <h2>Start</h2>
                 <div class="button-group">
                     <button name="command" value="open1">Open1</button>
                     <button name="command" value="open2">Open2</button>
                     <button name="command" value="open3">Open3</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Interject</h2>
+                <div class="button-group">
+                    <button name="command" value="buffer">Buffer</button>
+                    <button name="command" value="q1">R1</button>
+                    <button name="command" value="q2">R2</button>
+                    <button name="command" value="q3">R3</button>
+                    <button name="command" value="generate">Generate</button>
 
                     
 
                 </div>
             </div>
 
-            <div class="section">
-                <h2>Time</h2>
-                <div class="button-group">
-                    <button name="command" value="1min">1 Min Left</button>
-                    <button name="command" value="nudge">Nudge</button>
-                    <button name="command" value="agreement">Agreement</button>
-                    <button name="command" value="explain_all">Explain All</button>
-                    <button name="command" value="extra">Extra Item</button>
-                    <button name="command" value="wrap">Wrap Up</button>
-                </div>
-            </div>
 
             <div class="section">
                 <h2>Basics</h2>
@@ -215,41 +205,19 @@
                     <button name="command" value="thankyou">Thank You</button>
                     <button name="command" value="back">Back-channel</button>
                     <button name="command" value="wbu">Redirect</button>
+                    <button name="command" value="wrap">Wrap</button>
                     
                 </div>
             </div>
 
-            <div class="section">
-                <h2>Open-ended</h2>
-                <div class="button-group">
-                    <button name="command" value="buffer">Buffer</button>
-                    <button name="command" value="clarify">Clarify</button>
+   
 
-                    <button name="command" value="why">Why</button>
-                    <button name="command" value="explain">Explain</button>
 
-                    
-                    <button name="command" value="skill">Skill</button>
-                    <button name="command" value="challenge">Challenge</button>
-                    <button name="command" value="where">Where</button>
-                    <button name="command" value="continue">Continue</button>
-                    <button name="command" value="change">Change</button>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>Backup</h2>
-                <div class="button-group">
-                    <button name="command" value="warmth">Warmth</button>
-                    <button name="command" value="shelter">Shelter</button>
-                    <button name="command" value="food">Food</button>
-                    <button name="command" value="water">Water</button>
-                </div>
-            </div>
 
             <div class="section">
                 <h2>Gaze</h2>
                 <div class="button-group">
+                    <button name="command" value="lookaround">LookAround</button>
                     <button name="command" value="nod">nod</button>
                     <button name="command" value="left">Left</button>
                     <button name="command" value="right">Right</button>
